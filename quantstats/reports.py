@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import pandas as _pd
 import yfinance as yf
 import matplotlib.pyplot as _plt
@@ -560,6 +561,80 @@ def assets_used(df):
     return assets
 
 
+def buy_sell_orders(df):
+    buy, sell = 0, 0
+    for transaction in df.transactions:
+        for orders in transaction:
+            if len(orders) != 0:
+                amount = orders['amount']
+                if amount > 0:
+                    buy += 1
+                elif amount < 0:
+                    sell += 1
+    return buy, sell
+
+
+def plot_trades_per_time(df):
+    # Convert the 'period_open' column to a datetime type if it's not already
+    df['period_open'] = _pd.to_datetime(df['period_open'])
+
+    # Calculate the number of trades per week
+    trades_per_week = df.groupby(_pd.Grouper(key='period_open', freq='W'))[
+        'orders'].count()
+
+    # Calculate the number of trades per month
+    trades_per_month = df.groupby(_pd.Grouper(key='period_open', freq='M'))[
+        'orders'].count()
+
+    # Calculate the number of trades per year
+    trades_per_year = df.groupby(_pd.Grouper(key='period_open', freq='Y'))[
+        'orders'].count()
+
+    # Create line plots
+    fig, axes = _plt.subplots(3, 1, figsize=(10, 8))
+
+    # Plot trades per week
+    axes[0].plot(trades_per_week.index, trades_per_week.values, color='blue')
+    axes[0].set_title('Trades per Week')
+    axes[0].set_xlabel('Week')
+    axes[0].set_ylabel('Number of Trades')
+
+    # Plot trades per month
+    axes[1].plot(trades_per_month.index,
+                 trades_per_month.values, color='green')
+    axes[1].set_title('Trades per Month')
+    axes[1].set_xlabel('Month')
+    axes[1].set_ylabel('Number of Trades')
+
+    # Plot trades per year
+    axes[2].plot(trades_per_year.index, trades_per_year.values, color='red')
+    axes[2].set_title('Trades per Year')
+    axes[2].set_xlabel('Year')
+    axes[2].set_ylabel('Number of Trades')
+
+    # Adjust spacing between subplots
+    _plt.tight_layout()
+
+    # Show the plots
+    _plt.show()
+
+
+def trade_frequency(df):
+    buy, sell = buy_sell_orders(df)
+    total_trades = buy + sell
+    daily_trades = math.ceil(total_trades / len(df))
+    weekly_trades = daily_trades * 5
+    monthly_trades = daily_trades * 21
+    iDisplay(iHTML("<h2>Average Trades</h2>"))
+    print(f'Total Trades: {total_trades}')
+    print(f'Daily Trades: {daily_trades}')
+    print(f'Weekly Trades: {weekly_trades}')
+    print(f'Monthly Trades: {monthly_trades}')
+    print('\n\n')
+    plot_trades_per_time(df)
+    return
+
+
 def full(
     returns,
     benchmark=None,
@@ -807,6 +882,10 @@ def full(
 
         _plt.grid(True)
         _plt.show()
+
+    if df is not None:
+        # Trade frequency over week, months.
+        trade_frequency(df)
 
     # Trade Signals with portfolio values
     if df is not None:
