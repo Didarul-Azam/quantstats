@@ -918,6 +918,35 @@ def rolling_volatility(
     )
     if not show:
         return fig
+    
+def basic_sharpe(returns,
+    benchmark=None,
+    rf=0.0,
+    period=126,
+    period_label="6-Months",
+    periods_per_year=252,
+    lw=1.25,
+    fontname="Arial",
+    grayscale=False,
+    figsize=(10, 3),
+    ylabel="Sharpe",
+    subtitle=True,
+    savefig=None,
+    show=True,):
+    strategy_returns = _utils._prepare_returns(returns)
+    returns_sharpe = _stats.rolling_sharpe(strategy_returns,rf,period,True,periods_per_year,)
+    if benchmark is not None:
+        benchmark = _utils._prepare_benchmark(benchmark, returns.index)
+        benchmark_sharpe = _stats.rolling_sharpe(benchmark, rf, period, True, periods_per_year, prepare_returns=False)
+        benchmark_returns = _stats.compsum(benchmark)
+    # Sharpe
+    _plt.figure(figsize=(figsize[0]* 1.25, figsize[1] * 0.5))
+    _plt.plot(returns_sharpe, label = 'Strategy')
+    _plt.axhline(0, color="red", ls="--")
+    _plt.title('Rolling Sharpe Ratio (6-month window)')
+    _plt.legend()
+    _plt.tight_layout()
+    _plt.show()
 
 def basic_plots(returns,
     benchmark=None,
