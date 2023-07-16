@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import pandas as _pd
 import yfinance as yf
 import matplotlib.pyplot as _plt
@@ -560,6 +561,118 @@ def assets_used(df):
     return assets
 
 
+def buy_sell_orders(df):
+    buy, sell = 0, 0
+    for transaction in df.transactions:
+        for orders in transaction:
+            if len(orders) != 0:
+                amount = orders['amount']
+                if amount > 0:
+                    buy += 1
+                elif amount < 0:
+                    sell += 1
+    return buy, sell
+
+
+def plot_trades_per_time(df):
+    # Convert the 'period_open' column to a datetime type if it's not already
+    df['period_open'] = _pd.to_datetime(df['period_open'])
+
+    # Calculate the number of trades per week
+    trades_per_week = df.groupby(_pd.Grouper(key='period_open', freq='W'))[
+        'orders'].count()
+
+    # Calculate the number of trades per month
+    trades_per_month = df.groupby(_pd.Grouper(key='period_open', freq='M'))[
+        'orders'].count()
+
+    # Calculate the number of trades per year
+    trades_per_year = df.groupby(_pd.Grouper(key='period_open', freq='Y'))[
+        'orders'].count()
+
+    # Create line plots
+    fig, axes = _plt.subplots(3, 1, figsize=(10, 8))
+
+    # Plot trades per week
+    axes[0].plot(trades_per_week.index, trades_per_week.values, color='blue')
+    axes[0].set_title('Trades per Week')
+    axes[0].set_xlabel('Week')
+    axes[0].set_ylabel('Number of Trades')
+
+    # Plot trades per month
+    axes[1].plot(trades_per_month.index,
+                 trades_per_month.values, color='green')
+    axes[1].set_title('Trades per Month')
+    axes[1].set_xlabel('Month')
+    axes[1].set_ylabel('Number of Trades')
+
+    # Plot trades per year
+    axes[2].plot(trades_per_year.index, trades_per_year.values, color='red')
+    axes[2].set_title('Trades per Year')
+    axes[2].set_xlabel('Year')
+    axes[2].set_ylabel('Number of Trades')
+
+    # Adjust spacing between subplots
+    _plt.tight_layout()
+
+    # Show the plots
+    _plt.show()
+
+
+def trade_frequency(df):
+    buy, sell = buy_sell_orders(df)
+    total_trades = buy + sell
+    daily_trades = math.ceil(total_trades / len(df))
+    weekly_trades = daily_trades * 5
+    monthly_trades = daily_trades * 21
+    iDisplay(iHTML("<h2>Average Trades</h2>"))
+    print(f'Total Trades: {total_trades}')
+    print(f'Daily Trades: {daily_trades}')
+    print(f'Weekly Trades: {weekly_trades}')
+    print(f'Monthly Trades: {monthly_trades}')
+    print('\n\n')
+    plot_trades_per_time(df)
+    return
+
+
+def slippage_commission(results_pred):
+
+    order_dates = results_pred.PRI.dropna(
+    ).loc[[len(i) > 0 for i in results_pred.PRI.dropna()]].index
+    trx_list = []
+    for testdate in order_dates:
+        wishlist = results_pred.PRI.dropna().loc[testdate]
+        try:
+            for order in results_pred.transactions.loc[testdate + _pd.Timedelta(days=1)]:
+                order['wish_price'] = wishlist[order['sid']]
+                order['slippage'] = order['price'] - order['wish_price']
+                order['slippage_loss'] = order['slippage'] * \
+                    (order['amount']/abs(order['amount']))
+                order['slippagePerShare'] = order['slippage']/order['amount']
+            trx_list.extend(
+                results_pred.transactions.loc[testdate + _pd.Timedelta(days=1)])
+        except:
+            try:
+                for order in results_pred.transactions.loc[testdate + _pd.Timedelta(days=3)]:
+                    order['wish_price'] = wishlist[order['sid']]
+                    order['slippage'] = order['price'] - order['wish_price']
+                    order['slippage_loss'] = order['slippage'] * \
+                        (order['amount']/abs(order['amount']))
+                    order['slippagePerShare'] = order['slippage'] / \
+                        order['amount']
+                trx_list.extend(
+                    results_pred.transactions.loc[testdate + _pd.Timedelta(days=3)])
+            except:
+                pass
+            continue
+    slippage = sum([trx['slippage'] for trx in trx_list])
+    slippage_loss = sum([trx['slippage_loss'] for trx in trx_list])
+    commissions_paid = _pd.Series([sum([i['commission'] for i in j])
+                                  for j in results_pred.orders], index=results_pred.index).sum()
+
+    return slippage, slippage_loss, commissions_paid
+
+
 def full(
     returns,
     benchmark=None,
@@ -698,6 +811,18 @@ def full(
         print("\n\n")
         print("[Strategy Visualization]\nvia Matplotlib")
 
+    # Slippage & Transaction Cost
+    if df is not None:
+        if 'PRI' in df:   # Column needed for slippage, commission calculations
+            slippage, slippage_lost, commission = slippage_commission(df)
+            iDisplay(iHTML("<h2> Backtest Conditions </h2>"))
+            print(f"Slippage: {slippage}")
+            print(f"Slippage Lost: {slippage_lost}")
+            print(f"Total Commission: {commission}")
+        else:
+            pass
+
+    # Leverage and Exposure
     if df is not None:
         iDisplay(iHTML("<h2>Leverage</h2>"))
         avg_L_exp = df['long_exposure'].mean()
@@ -711,9 +836,9 @@ def full(
         print('Average Gross Leverage =', avg_g_lev)
         print('Max Leverage =', max_lev)
         print()
-        iDisplay(iHTML("<h4>Zipline Positions</h4>"))
-        positions = df[['positions']]
-        print(positions.to_string())
+        # iDisplay(iHTML("<h4>Zipline Positions</h4>"))
+        # positions = df[['positions']]
+        # print(positions.to_string())
         iDisplay(iHTML("<h4>Graphs</h4>"))
         # Create 4 subplots
         fig, axes = _plt.subplots(2, 2, figsize=(10, 8))
@@ -807,6 +932,10 @@ def full(
 
         _plt.grid(True)
         _plt.show()
+
+    if df is not None:
+        # Trade frequency over week, months.
+        trade_frequency(df)
 
     # Trade Signals with portfolio values
     if df is not None:
