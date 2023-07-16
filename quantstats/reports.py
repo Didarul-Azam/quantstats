@@ -19,6 +19,7 @@
 # limitations under the License.
 
 import pandas as _pd
+import yfinance as yf
 import matplotlib.pyplot as _plt
 import numpy as _np
 from math import sqrt as _sqrt, ceil as _ceil
@@ -517,7 +518,7 @@ def plot_portfolio_with_signals(results):
                 sell_signals.append(row['period_close'])
 
     # Set the figure size
-    _plt.figure(figsize=(24, 12))  # Adjust the width and height as needed
+    _plt.figure(figsize=(12, 8))  # Adjust the width and height as needed
 
     # Plotting portfolio value
     _plt.plot(results['period_close'],
@@ -569,7 +570,7 @@ def full(
     compounded=True,
     periods_per_year=252,
     match_dates=True,
-    df=None,  # expecting positions, long_exposure, short_exposure, net_leverage, gross_leverage columns
+    df=None,  # expecting positions, long_exposure, short_exposure, net_leverage, gross_leverage, transactions, max_leverage columns
     **kwargs,
 ):
     # prepare timeseries
@@ -767,6 +768,45 @@ def full(
                         periods_per_year=252,
                         **kwargs,
                         )
+
+    if df is not None:
+        # Bull, Bear, Crab selection
+        start = df.index[0]
+        end = df.index[-1]
+        sp500 = yf.download('^GSPC', start=start, end=end)['Adj Close']
+        benchmark_close = _pd.DataFrame(sp500)
+        benchmark_close = benchmark_close.rename(
+            columns={'Adj Close': 'price'})
+
+        time_frame = 30
+        benchmark_close['MovingAvg'] = benchmark_close['price'].rolling(
+            window=time_frame).mean()
+
+        benchmark_close['MarketType'] = 'Neutral'
+        benchmark_close.loc[benchmark_close['price'] >
+                            benchmark_close['MovingAvg'], 'MarketType'] = 'Bull'
+        benchmark_close.loc[benchmark_close['price'] <
+                            benchmark_close['MovingAvg'], 'MarketType'] = 'Bear'
+        benchmark_close.loc[(benchmark_close['price'] <= benchmark_close['MovingAvg'] * 1.02) &
+                            (benchmark_close['price'] >= benchmark_close['MovingAvg'] * 0.98), 'MarketType'] = 'Crab'
+        _plt.figure(figsize=(10, 6))
+        _plt.plot(benchmark_close.index,
+                  benchmark_close['price'], label='SP500')
+        _plt.plot(benchmark_close.index,
+                  benchmark_close['MovingAvg'], label='Moving Average')
+        _plt.fill_between(
+            benchmark_close.index, 0, benchmark_close['price'], where=benchmark_close['MarketType'] == 'Bull', color='green', alpha=0.3)
+        _plt.fill_between(
+            benchmark_close.index, 0, benchmark_close['price'], where=benchmark_close['MarketType'] == 'Bear', color='red', alpha=0.3)
+        _plt.fill_between(
+            benchmark_close.index, 0, benchmark_close['price'], where=benchmark_close['MarketType'] == 'Crab', color='none', alpha=0.3)
+        _plt.xlabel('Date')
+        _plt.ylabel('Price')
+        _plt.title('Bull, Bear, and Crab Market Regions')
+        _plt.legend()
+
+        _plt.grid(True)
+        _plt.show()
 
     # Trade Signals with portfolio values
     if df is not None:
