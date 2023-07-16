@@ -635,6 +635,44 @@ def trade_frequency(df):
     return
 
 
+def slippage_commission(results_pred):
+
+    order_dates = results_pred.PRI.dropna(
+    ).loc[[len(i) > 0 for i in results_pred.PRI.dropna()]].index
+    trx_list = []
+    for testdate in order_dates:
+        wishlist = results_pred.PRI.dropna().loc[testdate]
+        try:
+            for order in results_pred.transactions.loc[testdate + _pd.Timedelta(days=1)]:
+                order['wish_price'] = wishlist[order['sid']]
+                order['slippage'] = order['price'] - order['wish_price']
+                order['slippage_loss'] = order['slippage'] * \
+                    (order['amount']/abs(order['amount']))
+                order['slippagePerShare'] = order['slippage']/order['amount']
+            trx_list.extend(
+                results_pred.transactions.loc[testdate + _pd.Timedelta(days=1)])
+        except:
+            try:
+                for order in results_pred.transactions.loc[testdate + _pd.Timedelta(days=3)]:
+                    order['wish_price'] = wishlist[order['sid']]
+                    order['slippage'] = order['price'] - order['wish_price']
+                    order['slippage_loss'] = order['slippage'] * \
+                        (order['amount']/abs(order['amount']))
+                    order['slippagePerShare'] = order['slippage'] / \
+                        order['amount']
+                trx_list.extend(
+                    results_pred.transactions.loc[testdate + _pd.Timedelta(days=3)])
+            except:
+                pass
+            continue
+    slippage = sum([trx['slippage'] for trx in trx_list])
+    slippage_loss = sum([trx['slippage_loss'] for trx in trx_list])
+    commissions_paid = _pd.Series([sum([i['commission'] for i in j])
+                                  for j in results_pred.orders], index=results_pred.index).sum()
+
+    return slippage, slippage_loss, commissions_paid
+
+
 def full(
     returns,
     benchmark=None,
@@ -773,6 +811,18 @@ def full(
         print("\n\n")
         print("[Strategy Visualization]\nvia Matplotlib")
 
+    # Slippage & Transaction Cost
+    if df is not None:
+        if 'PRI' in df:   # Column needed for slippage, commission calculations
+            slippage, slippage_lost, commission = slippage_commission(df)
+            iDisplay(iHTML("<h2> Backtest Conditions </h2>"))
+            print(f"Slippage: {slippage}")
+            print(f"Slippage Lost: {slippage_lost}")
+            print(f"Total Commission: {commission}")
+        else:
+            pass
+
+    # Leverage and Exposure
     if df is not None:
         iDisplay(iHTML("<h2>Leverage</h2>"))
         avg_L_exp = df['long_exposure'].mean()
@@ -786,9 +836,9 @@ def full(
         print('Average Gross Leverage =', avg_g_lev)
         print('Max Leverage =', max_lev)
         print()
-        iDisplay(iHTML("<h4>Zipline Positions</h4>"))
-        positions = df[['positions']]
-        print(positions.to_string())
+        # iDisplay(iHTML("<h4>Zipline Positions</h4>"))
+        # positions = df[['positions']]
+        # print(positions.to_string())
         iDisplay(iHTML("<h4>Graphs</h4>"))
         # Create 4 subplots
         fig, axes = _plt.subplots(2, 2, figsize=(10, 8))
