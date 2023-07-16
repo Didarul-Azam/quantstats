@@ -534,7 +534,20 @@ def plot_portfolio_with_signals(results):
     # Display the plot
     _plt.show()
 
+# Function to retreive the assets used from zipline dataframe
 
+def assets_used(df):
+    assets = set()
+    for transaction in df.transactions:
+        for orders in transaction:
+            if len(orders) != 0:
+                line = str(orders['sid'])
+                start_index = line.find("[") + 1
+                end_index = line.find("]")
+                value = line[start_index:end_index]
+                assets.add(value)
+    assets = sorted(list(assets))
+    return assets
 
 def full(
     returns,
@@ -707,7 +720,11 @@ def full(
         _plt.show()
         plot_portfolio_with_signals(df)
 
-    
+    # Prints assets used in the benchmark
+    if df is not None:
+        iDisplay(iHTML("<h2> Assets Used </h2>"))
+        assets = assets_used(df)
+        print(*assets)
 
     plots(
         returns=returns,
@@ -721,7 +738,6 @@ def full(
         strategy_title=strategy_title,
         active=active,
     )
-
 
 
 
